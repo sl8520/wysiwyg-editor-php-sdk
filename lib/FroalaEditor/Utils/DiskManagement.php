@@ -17,7 +17,7 @@ class DiskManagement {
   *
   * @return {link: 'linkPath'} or error string
   */
-  public static function upload($fileRoute, $options) {
+  public static function upload($options) {
 
     $fieldname = $options['fieldname'];
 
@@ -41,34 +41,54 @@ class DiskManagement {
     // Generate new random name.
     $name = sha1(microtime()) . "." . $extension;
 
-    $fullNamePath = $_SERVER['DOCUMENT_ROOT'] . $fileRoute . $name;
+    // Get path imformation from options
+    $path = self::getPathFromOption($options);
 
     $mimeType = Utils::getMimeType($_FILES[$fieldname]["tmp_name"]);
 
-    if (isset($options['resize']) && $mimeType != 'image/svg+xml') {
+    if ($options['resize']['enable']===true && $mimeType != 'image/svg+xml') {
       // Resize image.
       $resize = $options['resize'];
 
       // Parse the resize params.
       $columns = $resize['columns'];
       $rows = $resize['rows'];
-      $filter = isset($resize['filter']) ? $resize['filter'] : \Imagick::FILTER_UNDEFINED;
+      $filter = isset($resize['filter']) && $resize['filter'] ? $resize['filter'] : \Imagick::FILTER_UNDEFINED;
       $blur = isset($resize['blur']) ? $resize['blur'] : 1;
-      $bestfit = isset($resize['bestfit']) ? $resize['bestfit'] : false;
+      $bestfit = isset($resize['keepRatio']) ? $resize['keepRatio'] : false;
 
       $imagick = new \Imagick($_FILES[$fieldname]["tmp_name"]);
 
       $imagick->resizeImage($columns, $rows, $filter, $blur, $bestfit);
-      $imagick->writeImage($fullNamePath);
+      $imagick->writeImage($path['fullServerPath'] . $name);
       $imagick->destroy();
     } else {
       // Save file in the uploads folder.
-      move_uploaded_file($_FILES[$fieldname]["tmp_name"], $fullNamePath);
+      move_uploaded_file($_FILES[$fieldname]["tmp_name"], $path['fullServerPath'] . $name);
+    }
+
+    // Create thumbnail (only for image upload)
+    if ($options['class']=="Image" && $options['thumb']['enable'] === true && $mimeType != 'image/svg+xml') {
+      // Resize image.
+      $resize = $options['thumb'];
+
+      // Parse the resize params.
+      $columns = $resize['columns'];
+      $rows = $resize['rows'];
+      $filter = isset($resize['filter']) && $resize['filter'] ? $resize['filter'] : \Imagick::FILTER_UNDEFINED;
+      $blur = isset($resize['blur']) ? $resize['blur'] : 1;
+      $bestfit = isset($resize['keepRatio']) ? $resize['keepRatio'] : false;
+
+      $imagick = new \Imagick($path['fullServerPath'] . $name);
+
+      $imagick->resizeImage($columns, $rows, $filter, $blur, $bestfit);
+      $imagick->writeImage($path['fullServerThumbPath'] . $name);
+      $imagick->destroy();
     }
 
     // Generate response.
     $response = new \StdClass;
-    $response->link = $fileRoute . $name;
+    $response->link = $path['fullFilePath'] . $name;
 
     return $response;
   }
@@ -80,16 +100,57 @@ class DiskManagement {
   * @param src string
   * @return boolean
   */
-  public static function delete($src) {
+  public static function delete($src, $options) {
+    // Get path imformation from options
+    $path = self::getPathFromOption($options);
 
-    $filePath = $_SERVER['DOCUMENT_ROOT'] . $src;
+    // Convert filePath to serverPath
+    $filePath = str_replace(array($path['fullFilePath'], $path['fullFileThumbPath']), $path['fullServerPath'], $src);
+    $thumbPath = str_replace(array($path['fullFilePath'], $path['fullFileThumbPath']), $path['fullServerThumbPath'], $src);
+
     // Check if file exists.
     if (file_exists($filePath)) {
       // Delete file.
-      return unlink($filePath);
+      unlink($filePath);
+    }
+    // Check thumb file exists.
+    if (file_exists($thumbPath)) {
+      // Delete file.
+      unlink($thumbPath);
     }
 
     return true;
+  }
+
+  /**
+   * get path imformation for options
+   * @param  array   $options   option from Image/File class
+   * @param  boolean $autoMkdir if ture, make dir if not exists
+   * @return array of path imformation
+   */
+  public static function getPathFromOption($options, $autoMkdir=true) {
+    $path = array();
+    $path['serverPath'] = $options['uploadRoot'] . $options['rootFolder'];
+    if (!Utils::chkFolderExists($path['serverPath'], $autoMkdir)) {
+      throw new \Exception('rootFolder not Exists or mkdir fail.');
+    }
+    $path['filePath'] = $options['uploadUrl'] . $options['rootFolder'];
+    $path['method'] = str_replace(array('Image', 'File'), array('image', 'file'), $options['class']);
+    $path['fileFolder'] = isset($options[ $path['method'] . 'Folder' ]) ? $options[ $path['method'] . 'Folder' ] : '';
+
+    $path['fullServerPath'] =  $path['serverPath'] . $path['fileFolder'];
+    $path['fullFilePath'] = $path['filePath'] . $path['fileFolder'];
+    if (!Utils::chkFolderExists($path['fullServerPath'], $autoMkdir)) {
+      throw new \Exception('fileFolder not Exists or mkdir fail.');
+    }
+    $path['fullServerThumbPath'] =  $path['serverPath'] . $path['fileFolder'] . $options['thumbFolder'];
+    $path['fullFileThumbPath'] = $path['filePath'] . $path['fileFolder'] . $options['thumbFolder'];
+    if ($options['thumb']['enable']===true){
+      if (!Utils::chkFolderExists($path['fullServerThumbPath'], $autoMkdir)) {
+        throw new \Exception('fileFolder not Exists or mkdir fail.');
+      }
+    }
+    return $path;
   }
 }
 

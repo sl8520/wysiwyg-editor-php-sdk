@@ -6,18 +6,39 @@ use FroalaEditor\Utils\DiskManagement;
 
 class Image {
   public static $defaultUploadOptions = array(
-    'fieldname' => 'file',
-    'validation' => array(
-      'allowedExts' => array('gif', 'jpeg', 'jpg', 'png', 'svg', 'blob'),
-      'allowedMimeTypes' => array('image/gif', 'image/jpeg', 'image/pjpeg', 'image/x-png', 'image/png', 'image/svg+xml')
+    'class'        => 'Image',
+    'fieldname'    => 'file',
+    'thumb'        => array(
+      'enable'    => true,
+      'columns'   => 130,
+      'rows'      => 130,
+      'filter'    => false,
+      'blur'      => 1,
+      'keepRatio' => true
     ),
-    'resize' => NULL
+    'uploadRoot'   => '',
+    'uploadUrl'    => '',
+    'rootFolder'   => '',
+    'imageFolder'  => '',
+    'fileFolder'   => '',
+    'thumbFolder'  => '',
+    'resize'       => array(
+      'enable'    => false,
+      'columns'   => 800,
+      'rows'      => 600,
+      'filter'    => false,
+      'blur'      => 1,
+      'keepRatio' => true
+    ),
+    'validation'   => array(
+      'allowedExts'      => array('gif', 'jpeg', 'jpg', 'png', 'svg', 'blob'),
+      'allowedMimeTypes' => array('image/gif', 'image/jpeg', 'image/pjpeg', 'image/x-png', 'image/png', 'image/svg+xml')
+    )
   );
 
   /**
   * Image upload to disk.
   *
-  * @param fileRoute string
   * @param options [optional]
   *   (
   *     fieldname => string
@@ -26,7 +47,7 @@ class Image {
   *   )
   * @return {link: 'linkPath'} or error string
   */
-  public static function upload($fileRoute, $options = NULL) {
+  public static function upload($options = NULL) {
     // Check if there are any options passed.
     if (is_null($options)) {
       $options = Image::$defaultUploadOptions;
@@ -35,7 +56,7 @@ class Image {
     }
 
     // Upload image.
-    return DiskManagement::upload($fileRoute, $options);
+    return DiskManagement::upload($options);
   }
 
   /**
@@ -44,36 +65,45 @@ class Image {
   * @param src string
   * @return boolean
   */
-  public static function delete($src) {
+  public static function delete($src, $options = NULL) {
+    // Check if there are any options passed.
+    if (is_null($options)) {
+      $options = Image::$defaultUploadOptions;
+    } else {
+      $options = array_merge(Image::$defaultUploadOptions, $options);
+    }
     // Delete image.
-    return DiskManagement::delete($src);
+    return DiskManagement::delete($src, $options);
   }
 
   /**
   * List images from disk
   *
-  * @param folderPath string
+  * @param options
   *
   * @return array of image properties
   *     - on success : [{url: 'url', thumb: 'thumb', name: 'name'}, ...]
   *     - on error   : {error: 'error message'}
   */
-  public static function getList($folderPath, $thumbPath = null) {
-
-    if (empty($thumbPath)) {
-      $thumbPath = $folderPath;
+  public static function getList($options = NULL) {
+    // Check if there are any options passed.
+    if (is_null($options)) {
+      $options = Image::$defaultUploadOptions;
+    } else {
+      $options = array_merge(Image::$defaultUploadOptions, $options);
     }
+    // Get file path imformation
+    $path = DiskManagement::getPathFromOption($options);
 
     // Array of image objects to return.
     $response = array();
 
-    $absoluteFolderPath = $_SERVER['DOCUMENT_ROOT'] . $folderPath;
-
     // Image types.
-    $image_types = Image::$defaultUploadOptions['validation']['allowedMimeTypes'];
+    //$image_types = Image::$defaultUploadOptions['validation']['allowedMimeTypes'];
+    $image_types = $options['validation']['allowedMimeTypes'];
 
     // Filenames in the uploads folder.
-    $fnames = scandir($absoluteFolderPath);
+    $fnames = scandir($path['fullServerThumbPath']);
 
     // Check if folder exists.
     if ($fnames) {
@@ -83,11 +113,11 @@ class Image {
         if (!is_dir($name)) {
           // Check if file is an image.
 
-          if (in_array(mime_content_type($absoluteFolderPath . $name), $image_types)) {
+          if (in_array(mime_content_type($path['fullServerThumbPath'] . $name), $image_types)) {
             // Build the image.
             $img = new \StdClass;
-            $img->url = $folderPath . $name;
-            $img->thumb = $thumbPath . $name;
+            $img->url = $path['fullFilePath'] . $name;
+            $img->thumb = $path['fullFileThumbPath'] . $name;
             $img->name = $name;
 
             // Add to the array of image.

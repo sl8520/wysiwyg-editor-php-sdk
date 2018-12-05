@@ -74,6 +74,28 @@ class Utils {
     // Else: no specific validating behaviour found.
     return false;
   }
+
+  /**
+   * Check folder exists or not.
+   * @param  string  $dir       server path
+   * @param  boolean $autoMkdir if ture, make dir if not exists
+   * @return boolean
+   */
+  public static function chkFolderExists($dir = '', $autoMkdir = true) {
+    if (empty($dir)) {
+       return false;
+    }
+    if (!file_exists($dir)) {
+      if ($autoMkdir === true) {
+        mkdir($dir, 0775);
+        return true;
+      } else {
+        return false;
+      }
+    } else {
+      return true;
+    }
+  }
 }
 
 // Define alias.
